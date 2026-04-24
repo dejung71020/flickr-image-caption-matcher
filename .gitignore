@@ -1,0 +1,10 @@
+# flickr dataset
+Images/
+captions.txt
+
+# 환경변수
+.env
+
+# 캐시
+__pycache__/
+*.pyc
