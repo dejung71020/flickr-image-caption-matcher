@@ -29,31 +29,52 @@ class GeminiClient:
         self.client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
         self.model = "gemini-2.5-flash-lite"
 
-    def predict(self, image_path: str, caption: str) -> dict:
+    def predict(self, image_path: str, caption: str, prompt_type: str = "A") -> dict:
         image_data = Path(image_path).read_bytes()
-        prompt = f"""You are an image-caption matching evaluator.
 
-        Given an image and a caption, determine whether they match.
+        prompts = {
+            "A": f"""You are an image-caption matching evaluator.
+            Determine if the image and caption match.
+            Caption: "{caption}"
+            Respond ONLY in this JSON format:
+            {{"match": 0 or 1, "confidence": float between 0.0 and 1.0, "reason": "1-3
+            sentence explanation in Korean"}}""",
 
-        Caption: "{caption}"
+                        "B": f"""You are an image-caption matching evaluator.
+            Analyze these aspects in order:
+            1. Objects/subjects: Are the main objects in the image the same as in the
+            caption?
+            2. Actions/verbs: Do the actions match?
+            3. Location/setting: Does the background match?
+            4. Overall meaning: Does the overall scene match?
+            Based on this structured analysis, determine if they match.
+            Caption: "{caption}"
+            Respond ONLY in this JSON format:
+            {{"match": 0 or 1, "confidence": float between 0.0 and 1.0, "reason": "1-3
+            sentence explanation in Korean"}}""",
 
-        Respond ONLY in this JSON format:
-        {{
-        "match": 0 or 1,
-        "confidence": float between 0.0 and 1.0,
-        "reason": "1-3 sentence explanation in Korean"
-        }}
-        """
+                        "C": f"""You are an image-caption matching evaluator.
+            Follow these steps:
+            Step 1 - Key elements in the IMAGE: List main objects, actions, locations
+            you see.
+            Step 2 - Key elements in the CAPTION: List main objects, actions,
+            locations mentioned.
+            Step 3 - Compare: Identify similarities and differences.
+            Step 4 - Final judgment: Based on comparison, decide if they match.
+            Caption: "{caption}"
+            Respond ONLY in this JSON format:
+            {{"match": 0 or 1, "confidence": float between 0.0 and 1.0, "reason": "1-3
+            sentence explanation in Korean"}}""",
+        }
 
         try:
             response = self.client.models.generate_content(
                 model=self.model,
                 contents=[
                     types.Part.from_bytes(data=image_data, mime_type="image/jpeg"),
-                    prompt,
+                    prompts[prompt_type],
                 ],
             )
-
         except Exception as e:
             if "429" in str(e):
                 print("  Rate limit, 60초 대기 후 재시도...")
@@ -62,17 +83,22 @@ class GeminiClient:
                     model=self.model,
                     contents=[
                         types.Part.from_bytes(data=image_data, mime_type="image/jpeg"),
-                        prompt,
+                        prompts[prompt_type],
                     ],
                 )
             else:
                 raise
-        text = response.text.strip()
+
+        text = response.text
+        if not text:
+            return {"match": -1, "confidence": 0.0, "reason": "응답 없음"}
+        text = text.strip()
         if text.startswith("```"):
             text = text.split("```")[1]
             if text.startswith("json"):
                 text = text[4:]
         return json.loads(text.strip())
+
 
     def generate_swap(self, caption: str, swap_type: str) -> str:
         prompts = {

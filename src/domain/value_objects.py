@@ -15,3 +15,8 @@ class MismatchType(str, Enum):
 class Label(int, Enum):
     MATCH       = 1
     MISMATCH    = 0
+
+class PromptType(str, Enum):
+    A = "A"
+    B = "B"
+    C = "C"
