@@ -1,8 +1,9 @@
 # src/infrastructure/gemini_client.py
 import os
 import json
-import base64
-import google.generativeai as genai
+import time
+from google import genai
+from google.genai import types
 from pathlib import Path
 
 '''
@@ -25,17 +26,12 @@ GEMINI에게 이진화한 이미지를 전송할 때에는 64진수로 변환하
 '''
 class GeminiClient:
     def __init__(self):
-        genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-        self.model = genai.GenerativeModel("models/gemini-2.5-flash-lite")
+        self.client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+        self.model = "models/gemini-2.5-flash-lite"
 
     def predict(self, image_path: str, caption: str) -> dict:
         image_data = Path(image_path).read_bytes()
-        image_part = {
-            "mime_type": "image/jpeg",
-            "data": base64.b64encode(image_data).decode("utf-8")
-        }
-        prompt = f"""
-        You are an image-caption matching evaluator.
+        prompt = f"""You are an image-caption matching evaluator.
 
         Given an image and a caption, determine whether they match.
 
@@ -43,18 +39,47 @@ class GeminiClient:
 
         Respond ONLY in this JSON format:
         {{
-            "match": 0 or 1,
-            "confidence": float between 0.0 and 1.0,
-            "reason": "1-3 sentence explanation in Korean"
+        "match": 0 or 1,
+        "confidence": float between 0.0 and 1.0,
+        "reason": "1-3 sentence explanation in Korean"
         }}
         """
 
-        response = self.model.generate_content([image_part, prompt])
+        response = self.client.models.generate_content(
+            model=self.model,
+            contents=[
+                types.Part.from_bytes(data=image_data, mime_type="image/jpeg"),
+                prompt,
+            ],
+        )
         text = response.text.strip()
-
         if text.startswith("```"):
             text = text.split("```")[1]
             if text.startswith("json"):
                 text = text[4:]
-        
         return json.loads(text.strip())
+
+    def generate_swap(self, caption: str, swap_type: str) -> str:
+        prompts = {
+            "object_swap": (
+                f'Change exactly ONE object or noun in this sentence to a clearly different object. '
+                f'The change must make the sentence factually wrong for the original image. '
+                f'Return ONLY the modified sentence, nothing else.\n\nOriginal: "{caption}"'
+            ),
+            "action_swap": (
+                f'Change exactly ONE action or verb in this sentence to a clearly different action. '
+                f'The change must make the sentence factually wrong for the original image. '
+                f'Return ONLY the modified sentence, nothing else.\n\nOriginal: "{caption}"'
+            ),
+            "place_swap": (
+                f'Change exactly ONE location, place, or setting in this sentence to a clearly different place. '
+                f'The change must make the sentence factually wrong for the original image. '
+                f'Return ONLY the modified sentence, nothing else.\n\nOriginal: "{caption}"'
+            ),
+        }
+        response = self.client.models.generate_content(
+            model=self.model,
+            contents=prompts[swap_type],
+        )
+        time.sleep(0.5)
+        return response.text.strip().strip('"')

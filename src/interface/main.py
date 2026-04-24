@@ -16,7 +16,8 @@ def main():
 
     print("=== 1단계 - 데이터셋 생성 ===")
     repo = FlickrRepository(caption_file, image_dir)
-    dataset = DatasetService(repo).build()
+    client = GeminiClient()
+    dataset = DatasetService(repo, client).build()
     print(f"생성 완료: {len(dataset)}개 샘플")
 
     dataset_rows = [
@@ -32,7 +33,6 @@ def main():
     print("dataset.csv 저장 완료")
 
     print("\n=== 2단계 LLM pred ===")
-    client = GeminiClient()
     predictions = PredictionService(client).predict_all(dataset)
 
     pred_rows = [
