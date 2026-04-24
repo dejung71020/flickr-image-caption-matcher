@@ -77,8 +77,8 @@ class GeminiClient:
             )
         except Exception as e:
             if "429" in str(e):
-                print("  Rate limit, 60초 대기 후 재시도...")
-                time.sleep(60)
+                print("  Rate limit, 10초 대기 후 재시도...")
+                time.sleep(10)
                 response = self.client.models.generate_content(
                     model=self.model,
                     contents=[
@@ -139,3 +139,169 @@ class GeminiClient:
         if not text:
             return caption
         return text.strip().strip('"')
+    
+    def analyze_image(self, image_path: str) -> dict:
+        image_data = Path(image_path).read_bytes()
+        prompt = """Analyze this image and extract key information.
+        Return ONLY this JSON format:
+        {
+        "objects": ["list of main objects/subjects"],
+        "actions": ["list of actions/verbs happening"],
+        "locations": ["list of locations/settings"]
+        }
+        """
+        try:
+            response = self.client.models.generate_content(
+                model=self.model,
+                contents=[
+                    types.Part.from_bytes(data=image_data, mime_type="image/jpeg"),
+                    prompt,
+                ],
+            )
+        except Exception as e:
+            if "429" in str(e):
+                time.sleep(10)
+                response = self.client.models.generate_content(
+                    model=self.model,
+                    contents=[
+                        types.Part.from_bytes(data=image_data, mime_type="image/jpeg"),
+                        prompt,
+                    ],
+                )
+            else:
+                raise
+        text = (response.text or "{}").strip()
+        if text.startswith("```"):
+            text = text.split("```")[1]
+            if text.startswith("json"):
+                text = text[4:]
+        return json.loads(text.strip())
+
+    def analyze_text(self, caption: str) -> dict:
+        prompt = f"""Extract key information from this caption.
+Caption: "{caption}"
+Return ONLY this JSON format:
+{{
+"objects": ["list of objects/subjects mentioned"],
+"actions": ["list of actions/verbs mentioned"],
+"locations": ["list of locations/settings mentioned"]
+}}"""
+        try:
+            response = self.client.models.generate_content(
+                model=self.model, contents=prompt
+            )
+        except Exception as e:
+            if "429" in str(e):
+                time.sleep(10)
+                response = self.client.models.generate_content(
+                    model=self.model, contents=prompt
+                )
+            else:
+                raise
+        text = (response.text or "{}").strip()
+        if text.startswith("```"):
+            text = text.split("```")[1]
+            if text.startswith("json"):
+                text = text[4:]
+        return json.loads(text.strip())
+
+    def judge(self, image_features: dict, text_features: dict,
+            caption: str, image_path: str, prompt_type: str = "B") -> dict:
+        image_data = Path(image_path).read_bytes()
+        prompts = {
+            "A": f"""Determine if the image and caption match.
+            Caption: "{caption}"
+            Image has: {image_features}
+            Respond ONLY: {{"match": 0 or 1, "confidence": float, "reason":
+            "Korean"}}""",
+
+                        "B": f"""Analyze these aspects:
+            1. Objects match? Image:{image_features.get('objects',[])}
+            Caption:{text_features.get('objects',[])}
+            2. Actions match? Image:{image_features.get('actions',[])}
+            Caption:{text_features.get('actions',[])}
+            3. Locations match? Image:{image_features.get('locations',[])}
+            Caption:{text_features.get('locations',[])}
+            4. Overall meaning?
+            Caption: "{caption}"
+            Respond ONLY: {{"match": 0 or 1, "confidence": float, "reason":
+            "Korean"}}""",
+
+                        "C": f"""Step 1 - Image elements: {image_features}
+            Step 2 - Caption elements: {text_features}
+            Step 3 - Compare similarities and differences
+            Step 4 - Final judgment
+            Caption: "{caption}"
+            Respond ONLY: {{"match": 0 or 1, "confidence": float, "reason":
+            "Korean"}}
+            """,
+        }
+        try:
+            response = self.client.models.generate_content(
+                model=self.model,
+                contents=[
+                    types.Part.from_bytes(data=image_data, mime_type="image/jpeg"),
+                    prompts.get(prompt_type, prompts["B"]),
+                ],
+            )
+        except Exception as e:
+            if "429" in str(e):
+                time.sleep(10)
+                response = self.client.models.generate_content(
+                    model=self.model,
+                    contents=[
+                        types.Part.from_bytes(data=image_data, mime_type="image/jpeg"),
+                        prompts.get(prompt_type, prompts["B"]),
+                    ],
+                )
+            else:
+                raise
+        text = response.text
+        if not text:
+            return {"match": -1, "confidence": 0.0, "reason": "응답 없음"}
+        text = text.strip()
+        if text.startswith("```"):
+            text = text.split("```")[1]
+            if text.startswith("json"):
+                text = text[4:]
+        return json.loads(text.strip())
+
+    def critic(self, judge_result: dict, image_features: dict, text_features: dict) -> dict:
+        prompt = f"""You are a critic reviewing an image-caption matching
+        judgment.
+
+        Judge's result: {judge_result}
+        Image features: {image_features}
+        Caption features: {text_features}
+
+        Review critically:
+        - Is the confidence score appropriate?
+        - Were all objects, actions, and locations properly compared?
+        - Is the reasoning sufficient and accurate?
+
+        Return ONLY this JSON:
+        {{
+        "agree": true or false,
+        "needs_review": true or false,
+        "reason": "Korean explanation"
+        }}"""
+        try:
+            response = self.client.models.generate_content(
+                model=self.model, contents=prompt
+            )
+        except Exception as e:
+            if "429" in str(e):
+                time.sleep(10)
+                response = self.client.models.generate_content(
+                    model=self.model, contents=prompt
+                )
+            else:
+                raise
+        text = (response.text or "").strip()
+        if not text:
+            return {"agree": True, "needs_review": False, "reason": "응답 없음"}
+        if text.startswith("```"):
+            text = text.split("```")[1]
+            if text.startswith("json"):
+                text = text[4:]
+        return json.loads(text.strip())
