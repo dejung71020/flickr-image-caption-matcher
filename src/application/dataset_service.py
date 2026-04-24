@@ -66,12 +66,11 @@ class DatasetService:
                 image_path=self.repo.get_image_path(image_id),
                 caption=caption,
                 label=Label.MATCH,
-                mismatch_type=MismatchType.ORGINAL,
+                mismatch_type=MismatchType.ORIGINAL,
             ))
 
         for image_id in shuffle_ids:
-            # 해당 이미지에 처음 캡션만 가져옴.
-            caption = self.repo.get_captions(image_id)[0]
+            caption = self.repo.get_random_caption_from_other(image_id)
             samples.append(Sample(
                 image_id=image_id,
                 image_path=self.repo.get_image_path(image_id),
@@ -82,13 +81,13 @@ class DatasetService:
 
         for image_id, swap_dict, mtype in [
             (object_ids, OBJECT_SWAPS, MismatchType.OBJECT_SWAP),
-            (object_ids, ACTION_SWAPS, MismatchType.ACTION_SWAP),
-            (object_ids, PLACE_SWAPS, MismatchType.PLACE_SWAP),
+            (action_ids, ACTION_SWAPS, MismatchType.ACTION_SWAP),
+            (place_ids, PLACE_SWAPS, MismatchType.PLACE_SWAP),
         ]:
             added = 0
             captions = []
             for img_id in image_id:
-                caption += [(img_id, c) for c in self.repo.get_captions(img_id)]
+                captions += [(img_id, c) for c in self.repo.get_captions(img_id)]
             
             random.seed(42)
             random.shuffle(captions)

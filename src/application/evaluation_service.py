@@ -9,7 +9,7 @@ class EvaluationService:
         tp = sum(1 for p in valid if p.label == 1 and p.pred_match == 1)
 
         # 예측한 음성 중에 맞춤
-        tn = sum(1 for p in valid if p.label == 1 and p.pred_match == 0)
+        tn = sum(1 for p in valid if p.label == 0 and p.pred_match == 0)
 
         # 예측한 양성 중에 틀림
         fp = sum(1 for p in valid if p.label == 0 and p.pred_match == 1)
@@ -24,7 +24,7 @@ class EvaluationService:
         precision = tp / (tp + fp) if (tp + fp) > 0 else 0
 
         # 재현율 : 실제 양성 중에 예측한 양성
-        recall = tp / (tp + tn) if (tp + tn) > 0 else 0
+        recall = tp / (tp + fn) if (tp + fn) > 0 else 0
 
         # f1-score : 정밀도와 재현율의 조화평균이었던거 같은데 개념만 빅분기때외우고 식은 모름
         f1 = (2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0)

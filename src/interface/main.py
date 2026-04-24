@@ -39,7 +39,7 @@ def main():
         {
             "image_id": p.image_id,
             "caption": p.caption,
-            "label": p.label,
+            "label": p.label.value,
             "pred_match": p.pred_match,
             "confidence": p.confidence,
             "reason": p.reason,
