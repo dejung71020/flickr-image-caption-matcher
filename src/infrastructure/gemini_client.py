@@ -27,7 +27,7 @@ GEMINI에게 이진화한 이미지를 전송할 때에는 64진수로 변환하
 class GeminiClient:
     def __init__(self):
         self.client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-        self.model = "models/gemini-2.5-flash-lite"
+        self.model = "gemini-2.5-flash-lite"
 
     def predict(self, image_path: str, caption: str) -> dict:
         image_data = Path(image_path).read_bytes()
@@ -45,13 +45,28 @@ class GeminiClient:
         }}
         """
 
-        response = self.client.models.generate_content(
-            model=self.model,
-            contents=[
-                types.Part.from_bytes(data=image_data, mime_type="image/jpeg"),
-                prompt,
-            ],
-        )
+        try:
+            response = self.client.models.generate_content(
+                model=self.model,
+                contents=[
+                    types.Part.from_bytes(data=image_data, mime_type="image/jpeg"),
+                    prompt,
+                ],
+            )
+
+        except Exception as e:
+            if "429" in str(e):
+                print("  Rate limit, 60초 대기 후 재시도...")
+                time.sleep(60)
+                response = self.client.models.generate_content(
+                    model=self.model,
+                    contents=[
+                        types.Part.from_bytes(data=image_data, mime_type="image/jpeg"),
+                        prompt,
+                    ],
+                )
+            else:
+                raise
         text = response.text.strip()
         if text.startswith("```"):
             text = text.split("```")[1]
@@ -77,9 +92,24 @@ class GeminiClient:
                 f'Return ONLY the modified sentence, nothing else.\n\nOriginal: "{caption}"'
             ),
         }
-        response = self.client.models.generate_content(
-            model=self.model,
-            contents=prompts[swap_type],
-        )
+        try:
+            response = self.client.models.generate_content(
+                model=self.model,
+                contents=prompts[swap_type],
+            )
+
+        except Exception as e:
+            if "429" in str(e):
+                print("  Rate limit, 10초 대기 후 재시도...")
+                time.sleep(10)
+                response = self.client.models.generate_content(
+                    model=self.model,
+                    contents=prompts[swap_type],
+                )
+            else:
+                raise
         time.sleep(0.5)
-        return response.text.strip().strip('"')
+        text = response.text
+        if not text:
+            return caption
+        return text.strip().strip('"')
