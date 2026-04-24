@@ -8,3 +8,5 @@ captions.txt
 # 캐시
 __pycache__/
 *.pyc
+
+*.csv
